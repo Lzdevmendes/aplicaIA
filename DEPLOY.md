@@ -16,17 +16,21 @@ verificação OAuth do Google.
 
 ## Estado atual (checklist mestre)
 
-- [x] **Fase 1 — Deploy na Vercel** com as 8 env vars e `TOKEN_ENCRYPTION_KEY` de produção
-- [ ] **Fase 2 — OAuth de produção** (Site URL + Redirect no Supabase)
+- [x] **Fase 1 — Deploy na Vercel** com as env vars e `TOKEN_ENCRYPTION_KEY` de produção
+- [ ] **Fase 2 — OAuth de produção** (Site URL + Redirect no Supabase + templates de e-mail)
 - [x] **Fase 3a — Página de privacidade** (`/privacidade`, com declaração de Uso Limitado do Google)
 - [ ] **Fase 3b — Submeter a verificação OAuth do Google** (2 a 8 semanas)
-- [ ] **Fase 4 — Ligar o envio automático** (`GMAIL_SEND_MODE=api`) quando a verificação sair
+- [x] **Fase 4 — Envio automático por usuário** (quem conecta o Gmail em `/perfil` já anexa o CV; sem env var)
 - [ ] **Fase 5 — Observabilidade** (Sentry nas rotas `/api/*`)
 - [ ] **Fase 6 — Antes de abrir ao público** (apagar dev user, Leaked Password Protection)
 
-O app já funciona em produção em modo **deeplink** (o botão "Enviar pelo Gmail"
-abre um rascunho pronto; o usuário anexa o CV e envia). O envio automático com o
-CV anexado só liga na Fase 4.
+Login não depende mais só do Google: `/login` tem link mágico e e-mail+senha
+nativos do Supabase, além do Google (agora só com escopo de perfil/e-mail —
+sem pedir `gmail.send`). Conectar o Gmail para envio automático (com CV
+anexado) é um passo à parte, em `/perfil` — quem não conecta continua no
+rascunho manual do Gmail. Enquanto a verificação OAuth (Fase 3b) não sai,
+quem conecta o Gmail vê a tela "app não verificado" do Google e segue em
+"Avançado" — não bloqueia mais o login de ninguém.
 
 ---
 
@@ -45,7 +49,6 @@ GEMINI_API_KEY=...                               # aistudio.google.com > Get API
 GOOGLE_CLIENT_ID=986438591485-...apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=GOCSPX-...
 TOKEN_ENCRYPTION_KEY=...                          # openssl rand -base64 32 (NOVA em prod, ≠ da dev)
-NEXT_PUBLIC_GMAIL_SEND_MODE=deeplink              # vira "api" só na Fase 4
 ```
 
 > ⚠️ A `TOKEN_ENCRYPTION_KEY` de produção é **diferente** da de dev, de
@@ -65,20 +68,37 @@ O login passa pela Supabase, então o essencial é configurar lá.
    (`.../project/plxzmbvoelasnwotozxi/auth/url-configuration`):
    - **Site URL:** `https://aplica-ia.vercel.app`
    - **Redirect URLs:** adicionar `https://aplica-ia.vercel.app/auth/callback`
-     (manter o `http://localhost:3000/auth/callback` do dev).
-2. **Google Cloud Console** (conferência): o Google redireciona para o callback
-   da Supabase, já cadastrado
-   (`https://plxzmbvoelasnwotozxi.supabase.co/auth/v1/callback`). Não precisa
-   mexer.
-3. **Testar:** abrir `https://aplica-ia.vercel.app/login` e entrar com Google.
-   Como seu e-mail já é usuário de teste, deve logar. Confirmar no banco que o
-   refresh token foi gravado (cifrado) em `google_accounts`.
+     e `https://aplica-ia.vercel.app/auth/confirm` (manter os equivalentes
+     `http://localhost:3000/...` do dev).
+2. **Supabase > Authentication > Email Templates**: os templates de "Magic
+   Link", "Confirm signup" e "Reset Password" precisam apontar para
+   `/auth/confirm` (não para o `{{ .ConfirmationURL }}` padrão, que usa o
+   `/verify` hospedado da própria Supabase e não bate com a sessão via cookie
+   deste app). Trocar o link de cada template para:
+   `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type={{ .Type }}&next=/nova`
+   (o de recuperação de senha usa `next=/auth/reset-password`).
+3. **Supabase > Authentication > Providers > Email**: confirmar que o
+   provider "Email" está habilitado e decidir o toggle "Confirm email".
+4. **Google Cloud Console > Credentials > cliente "AplicaAI Web" > Authorized
+   redirect URIs**: além do callback da Supabase já cadastrado
+   (`https://plxzmbvoelasnwotozxi.supabase.co/auth/v1/callback`, usado só
+   pelo login com Google), adicionar os dois callbacks do fluxo "Conectar
+   Gmail" (que não passa pela Supabase):
+   `https://aplica-ia.vercel.app/api/google/connect/callback` e
+   `http://localhost:3000/api/google/connect/callback`.
+5. **Testar:** abrir `https://aplica-ia.vercel.app/login` e entrar com Google,
+   com link mágico e com e-mail+senha. O login com Google não pede mais
+   `gmail.send` — só confirma sessão. Para o envio automático, testar
+   "Conectar Gmail" em `/perfil` e confirmar no banco que o refresh token foi
+   gravado (cifrado) em `google_accounts`.
 
 ## Fase 3 — Verificação OAuth do Google (o gargalo de prazo)
 
 O escopo `gmail.send` é **sensitive** (não restricted — não exige a auditoria
 CASA). Sem a verificação, o Google limita a 100 usuários em "modo de teste" e
-mostra a tela de "app não verificado".
+mostra a tela de "app não verificado" — mas isso só afeta quem clica em
+"Conectar Gmail" em `/perfil`, não mais o login (o login com Google só pede
+`email profile`, que nunca precisou de verificação).
 
 - **3a ✅** Página de privacidade pública em `/privacidade` (pré-requisito da
   submissão), com a declaração de que o uso dos dados das APIs do Google segue a
@@ -89,12 +109,16 @@ mostra a tela de "app não verificado".
   (`https://aplica-ia.vercel.app`), URL da política
   (`https://aplica-ia.vercel.app/privacidade`), domínio autorizado, justificativa
   do escopo `gmail.send` e um vídeo curto do fluxo. Leva de 2 a 8 semanas e
-  **não bloqueia** — o app roda em `deeplink` enquanto isso.
+  **não bloqueia mais ninguém** — quem quiser conectar o Gmail antes da
+  verificação sair só passa pela tela de aviso do Google.
 
-## Fase 4 — Ligar o envio automático ⬜ (após a verificação)
+## Fase 4 — Envio automático por usuário ✅ feito
 
-Na Vercel, trocar `NEXT_PUBLIC_GMAIL_SEND_MODE` de `deeplink` para `api` e
-redeployar. A partir daí o envio é automático, com o CV anexado.
+Não depende mais de env var nem de deploy. Assim que alguém clica "Conectar
+Gmail" em `/perfil` e autoriza o `gmail.send`, `/nova` passa a enviar
+automático (com o CV atual anexado) só para aquele usuário — quem não
+conecta continua no rascunho manual de sempre. `NEXT_PUBLIC_GMAIL_SEND_MODE`
+foi removido; não existe mais nas env vars do projeto.
 
 ## Fase 5 — Observabilidade ⬜ pendente
 
@@ -107,8 +131,11 @@ Criar projeto no Sentry (ou similar), pegar o **DSN** e plugar nas rotas
       `delete from auth.users where id = '33333333-3333-3333-3333-333333333333';`
       (as tabelas por usuário caem em cascade).
 - [ ] Supabase > Auth > Providers: habilitar **Leaked Password Protection**
-      (toggle grátis; baixa relevância porque o login é só Google).
-- [ ] Confirmar o Site URL de produção (Fase 2) e revisar os Redirect URLs.
+      (toggle grátis — **agora relevante de verdade**, já que o login por
+      e-mail+senha existe; não é mais "baixa relevância porque o login é só
+      Google").
+- [ ] Confirmar o Site URL de produção (Fase 2) e revisar os Redirect URLs
+      (inclui `/auth/confirm` e os dois callbacks de `/api/google/connect`).
 
 ---
 

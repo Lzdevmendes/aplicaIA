@@ -14,9 +14,9 @@ export const maxDuration = 60;
 /**
  * Envia a candidatura pela API do Gmail, com o CV anexado.
  *
- * Só entra em ação quando NEXT_PUBLIC_GMAIL_SEND_MODE=api. Enquanto a
- * verificação OAuth do Google não sai, o front usa o deep link e nem chega
- * aqui.
+ * Só entra em ação para quem conectou o Gmail em /perfil (existe linha em
+ * google_accounts) — a página /nova decide isso por usuário, não por env var.
+ * Quem não conectou usa o deep link e nem chega aqui.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient();

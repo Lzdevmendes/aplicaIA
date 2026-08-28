@@ -11,6 +11,7 @@ import type { EditableProfile } from "@/lib/ai/edit-schema";
 import type { OnboardingStepKey } from "@/lib/ai/schemas";
 import { ProfileView } from "./profile-view";
 import { ProfileForm } from "./profile-form";
+import { GmailConnectCard } from "./gmail-connect-card";
 
 function initials(name: string) {
   if (!name.trim()) return "··";
@@ -22,7 +23,13 @@ function initials(name: string) {
     .join("");
 }
 
-export function ProfileEditor({ initial }: { initial: EditableProfile }) {
+export function ProfileEditor({
+  initial,
+  gmail,
+}: {
+  initial: EditableProfile;
+  gmail: { email: string; connectedAt: string } | null;
+}) {
   const router = useRouter();
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [draft, setDraft] = useState<EditableProfile>(initial);
@@ -133,6 +140,8 @@ export function ProfileEditor({ initial }: { initial: EditableProfile }) {
           </button>
         </div>
       )}
+
+      {mode === "view" && <GmailConnectCard gmail={gmail} />}
 
       {mode === "view" ? (
         <ProfileView profile={initial} />

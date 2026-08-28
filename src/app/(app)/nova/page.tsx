@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { NovaFlow } from "@/components/nova/nova-flow";
 
@@ -11,7 +11,7 @@ export default async function NovaCandidaturaPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [cvRes, draftsRes, weekRes] = await Promise.all([
+  const [cvRes, draftsRes, weekRes, googleRes] = await Promise.all([
     supabase
       .from("cv_files")
       .select("filename, size_bytes")
@@ -29,10 +29,17 @@ export default async function NovaCandidaturaPage() {
       .eq("user_id", user.id)
       .not("applied_at", "is", null)
       .gte("applied_at", startOfWeek()),
+    // google_accounts não tem RLS — admin client, sempre filtrado à mão.
+    createAdminClient()
+      .from("google_accounts")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle(),
   ]);
 
-  const sendMode =
-    process.env.NEXT_PUBLIC_GMAIL_SEND_MODE === "api" ? "api" : "deeplink";
+  // Envio automático (com CV anexado) para quem conectou o Gmail em /perfil;
+  // senão cai no rascunho manual do Gmail.
+  const sendMode = googleRes.data ? "api" : "deeplink";
 
   return (
     <section className="px-5 sm:px-10 pt-6 sm:pt-[34px] pb-12 max-w-[1320px] mx-auto">

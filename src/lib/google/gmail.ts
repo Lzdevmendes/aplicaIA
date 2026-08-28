@@ -7,16 +7,23 @@
  */
 
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+const REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
+const USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v2/userinfo";
 const SEND_ENDPOINT =
   "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 
-/** Troca o refresh token por um access token fresco. */
-export async function refreshAccessToken(refreshToken: string): Promise<string> {
+function googleCredentials() {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
     throw new Error("GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET não configurados");
   }
+  return { clientId, clientSecret };
+}
+
+/** Troca o refresh token por um access token fresco. */
+export async function refreshAccessToken(refreshToken: string): Promise<string> {
+  const { clientId, clientSecret } = googleCredentials();
 
   const res = await fetch(TOKEN_ENDPOINT, {
     method: "POST",
@@ -35,6 +42,57 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
     throw new Error(json.error_description ?? json.error ?? "falha ao renovar o token");
   }
   return json.access_token as string;
+}
+
+/**
+ * Troca o `code` do fluxo "Conectar Gmail" (OAuth avulso, fora do login) por
+ * um refresh token. Usado só em /api/google/connect/callback.
+ */
+export async function exchangeCodeForTokens(
+  code: string,
+  redirectUri: string,
+): Promise<{ accessToken: string; refreshToken: string }> {
+  const { clientId, clientSecret } = googleCredentials();
+
+  const res = await fetch(TOKEN_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+      redirect_uri: redirectUri,
+      grant_type: "authorization_code",
+    }),
+  });
+
+  const json = await res.json();
+  if (!res.ok || !json.access_token || !json.refresh_token) {
+    throw new Error(
+      json.error_description ?? json.error ?? "falha ao trocar o código pelo token",
+    );
+  }
+  return { accessToken: json.access_token as string, refreshToken: json.refresh_token as string };
+}
+
+/** E-mail da conta Google que acabou de conceder acesso. */
+export async function fetchGoogleEmail(accessToken: string): Promise<string> {
+  const res = await fetch(USERINFO_ENDPOINT, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const json = await res.json();
+  if (!res.ok || !json.email) {
+    throw new Error(json.error?.message ?? "falha ao obter o e-mail da conta Google");
+  }
+  return json.email as string;
+}
+
+/** Revoga o refresh token no Google. Best-effort — usado ao desconectar. */
+export async function revokeToken(token: string): Promise<void> {
+  await fetch(`${REVOKE_ENDPOINT}?token=${encodeURIComponent(token)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
 }
 
 export type EmailAttachment = {

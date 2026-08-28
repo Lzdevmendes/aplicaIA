@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { ProfileEditor } from "@/components/perfil/profile-editor";
 import type { EditableProfile } from "@/lib/ai/edit-schema";
 
@@ -12,12 +12,19 @@ export default async function PerfilPage() {
 
   // A RLS já restringe ao usuário; o .eq() é redundante mas deixa a intenção
   // explícita para quem ler a query.
-  const [profileRes, skillsRes, expRes, eduRes, certRes] = await Promise.all([
+  const [profileRes, skillsRes, expRes, eduRes, certRes, googleRes] = await Promise.all([
     supabase.from("profiles").select("*").eq("user_id", user.id).maybeSingle(),
     supabase.from("profile_skills").select("skill").eq("user_id", user.id).order("position"),
     supabase.from("experiences").select("*").eq("user_id", user.id).order("position"),
     supabase.from("education").select("*").eq("user_id", user.id).order("position"),
     supabase.from("certifications").select("*").eq("user_id", user.id).order("position"),
+    // google_accounts não tem RLS (tabela fechada) — precisa do admin client,
+    // sempre filtrado por user_id na mão. Uso permitido por AGENTS.md.
+    createAdminClient()
+      .from("google_accounts")
+      .select("email, connected_at")
+      .eq("user_id", user.id)
+      .maybeSingle(),
   ]);
 
   const p = profileRes.data;
@@ -52,5 +59,14 @@ export default async function PerfilPage() {
     })),
   };
 
-  return <ProfileEditor initial={initial} />;
+  return (
+    <ProfileEditor
+      initial={initial}
+      gmail={
+        googleRes.data
+          ? { email: googleRes.data.email, connectedAt: googleRes.data.connected_at }
+          : null
+      }
+    />
+  );
 }
