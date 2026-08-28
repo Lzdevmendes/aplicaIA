@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { gmailComposeUrl } from "./deeplink";
+import { gmailComposeUrl, wouldTruncate } from "./deeplink";
 
 describe("gmailComposeUrl", () => {
   it("aponta para o compositor do Gmail web", () => {
@@ -32,5 +32,21 @@ describe("gmailComposeUrl", () => {
     expect(parsed.searchParams.get("subject") ?? parsed.searchParams.get("su")).toBe(
       "vaga & cargo = 100%",
     );
+  });
+
+  it("não corta corpos curtos", () => {
+    const body = "corpo normal de e-mail, bem curto.";
+    expect(wouldTruncate(body)).toBe(false);
+    const url = new URL(gmailComposeUrl({ to: "a@b.com", subject: "s", body }));
+    expect(url.searchParams.get("body")).toBe(body);
+  });
+
+  it("corta corpos longos demais e avisa", () => {
+    const body = "x".repeat(7000);
+    expect(wouldTruncate(body)).toBe(true);
+    const url = new URL(gmailComposeUrl({ to: "a@b.com", subject: "s", body }));
+    const truncated = url.searchParams.get("body")!;
+    expect(truncated.length).toBeLessThan(body.length);
+    expect(truncated).toContain("continue direto no Gmail");
   });
 });

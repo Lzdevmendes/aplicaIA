@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { gmailComposeUrl } from "@/lib/gmail/deeplink";
 import { toBase64 } from "@/lib/nova/to-base64";
+import { isValidEmail } from "@/lib/nova/email";
 import { SkillMatch } from "./skill-match";
 import {
   IconSparkle,
@@ -194,6 +195,11 @@ export function NovaFlow({
   async function sendEmail() {
     if (!job || !email) return;
 
+    if (!job.contact_email || !isValidEmail(job.contact_email)) {
+      setError("A vaga não trouxe um e-mail de contato válido para enviar.");
+      return;
+    }
+
     if (sendMode === "deeplink") {
       // Deep link não anexa o CV nem confirma envio, então já grava como
       // enviada — a candidatura consta no tracker mesmo que o usuário feche a
@@ -201,7 +207,7 @@ export function NovaFlow({
       await saveDraft("enviada");
       window.open(
         gmailComposeUrl({
-          to: job.contact_email || "",
+          to: job.contact_email,
           subject: email.subject,
           body: email.body,
         }),
@@ -213,10 +219,6 @@ export function NovaFlow({
 
     // Modo API: grava como rascunho para ter o id, e o /api/email/send confirma
     // o envio (com o CV anexado) e vira o status para enviada.
-    if (!job.contact_email) {
-      setError("A vaga não trouxe um e-mail de contato para enviar.");
-      return;
-    }
     const appId = await saveDraft("rascunho");
     if (!appId) return;
 
