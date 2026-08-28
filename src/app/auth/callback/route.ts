@@ -1,8 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { encryptToken } from "@/lib/crypto";
+import { createClient } from "@/lib/supabase/server";
 
-/** Troca o `code` do OAuth pela sessão e manda o usuário para dentro do app. */
+/**
+ * Troca o `code` do OAuth pela sessão e manda o usuário para dentro do app.
+ *
+ * Login com Google só pede escopo de perfil/e-mail — não grava nada em
+ * google_accounts. Conectar o Gmail (gmail.send) é um fluxo à parte, iniciado
+ * em /perfil e resolvido em /api/google/connect/callback.
+ */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
@@ -13,33 +18,12 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
     return NextResponse.redirect(
       `${origin}/login?erro=${encodeURIComponent(error.message)}`,
     );
-  }
-
-  // O Google só devolve o refresh token no primeiro consentimento (com
-  // prompt=consent). Guardamos aqui — é o que permite mintar access tokens
-  // depois, sem reautenticar, para enviar pelo Gmail.
-  const session = data.session;
-  const refreshToken = session?.provider_refresh_token;
-  if (session?.user && refreshToken) {
-    try {
-      const admin = createAdminClient();
-      await admin.from("google_accounts").upsert({
-        user_id: session.user.id,
-        email: session.user.email ?? "",
-        refresh_token: encryptToken(refreshToken),
-        scopes: ["https://www.googleapis.com/auth/gmail.send"],
-      });
-    } catch (err) {
-      // Não bloqueia o login: o usuário entra e cai no fallback de deep link
-      // até reconectar o Google.
-      console.error("[auth/callback] falha ao gravar google refresh token", err);
-    }
   }
 
   return NextResponse.redirect(`${origin}${next}`);
