@@ -41,24 +41,26 @@ export const THINKING: ThinkingConfig = { thinkingLevel: ThinkingLevel.LOW };
 /**
  * Repete a chamada em erros transitórios do tier gratuito.
  *
- * 429 (cota por minuto), 500 e 503 ("high demand... try again later") são
- * comuns no free e não indicam bug — sem o retry, o usuário perderia um
- * onboarding à toa. Backoff exponencial com jitter: ~1s, 2s, 4s.
+ * 429 (cota por minuto) e 500 costumam ser blips curtos — 4 tentativas bastam.
+ * 503 ("high demand... try again later") é o que mais aparece em picos de uso
+ * do tier gratuito e pode durar mais que isso, então leva mais tentativas e um
+ * backoff maior (visto em produção: sequências de 503 por >1min seguido).
+ * Backoff exponencial com jitter, capado em 8s por tentativa.
  */
+const RETRY_ATTEMPTS: Record<number, number> = { 429: 4, 500: 4, 503: 6 };
+
 export async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
-  const RETRIABLE = new Set([429, 500, 503]);
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; ; attempt++) {
     try {
       return await fn();
     } catch (err) {
       const status = (err as { status?: number })?.status;
-      if (status === undefined || !RETRIABLE.has(status) || attempt === 3) throw err;
-      lastErr = err;
-      await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt + Math.random() * 500));
+      const maxAttempts = status !== undefined ? RETRY_ATTEMPTS[status] : undefined;
+      if (maxAttempts === undefined || attempt >= maxAttempts - 1) throw err;
+      const backoff = Math.min(1000 * 2 ** attempt, 8000) + Math.random() * 500;
+      await new Promise((r) => setTimeout(r, backoff));
     }
   }
-  throw lastErr;
 }
 
 /**

@@ -60,9 +60,9 @@ describe("withRetry", () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it("desiste após 4 tentativas e propaga o último erro", async () => {
+  it("desiste após 4 tentativas em 429/500 e propaga o último erro", async () => {
     vi.useFakeTimers();
-    const err = { status: 503 };
+    const err = { status: 500 };
     const fn = vi.fn().mockRejectedValue(err);
 
     const p = withRetry(fn);
@@ -71,5 +71,17 @@ describe("withRetry", () => {
     await vi.runAllTimersAsync();
     await assertion;
     expect(fn).toHaveBeenCalledTimes(4);
+  });
+
+  it("503 leva mais tentativas que 429/500 (picos de alta demanda duram mais)", async () => {
+    vi.useFakeTimers();
+    const err = { status: 503 };
+    const fn = vi.fn().mockRejectedValue(err);
+
+    const p = withRetry(fn);
+    const assertion = expect(p).rejects.toBe(err);
+    await vi.runAllTimersAsync();
+    await assertion;
+    expect(fn).toHaveBeenCalledTimes(6);
   });
 });
