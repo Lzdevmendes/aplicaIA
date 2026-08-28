@@ -1,21 +1,15 @@
-import { gemini, MODEL, THINKING, toGeminiSchema, withRetry } from "@/lib/ai/gemini";
-import { EmailSchema } from "@/lib/ai/job-schemas";
-import { EMAIL_GENERATE_SYSTEM } from "@/lib/ai/prompts";
 import { loadProfileContext } from "@/lib/db/profile";
 import { createClient } from "@/lib/supabase/server";
 import { enforceRateLimits, RateLimitError, AI_LIMITS } from "@/lib/ratelimit";
+import { generateEmail } from "@/lib/nova/email-template";
 import { NextResponse, type NextRequest } from "next/server";
-
-export const maxDuration = 60;
 
 const MAX_JOB_BYTES = 60_000; // o objeto job extraído nunca chega perto disso
 
 /**
- * Gera o e-mail de candidatura a partir do perfil + vaga + match.
- *
- * Retorna JSON (não stream): o structured output garante assunto e corpo
- * separados, e o corpo cabe numa resposta só. A UI anima a chegada com a
- * animação vpSettle do protótipo, não com streaming token a token.
+ * Gera o e-mail de candidatura a partir do perfil + vaga + match, por
+ * template determinístico (email-template.ts) — sem IA, sem custo, sem
+ * depender da cota do Gemini.
  */
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -58,74 +52,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const context = {
-    candidato: {
-      nome: profile.full_name,
-      headline: profile.headline,
-      resumo: profile.summary,
-      github: profile.github,
-      site: profile.website,
-      experiencias: profile.experiences,
-      skills: profile.skills,
+  const result = generateEmail({
+    candidate: {
+      fullName: profile.full_name ?? "",
+      headline: profile.headline ?? "",
+      summary: profile.summary ?? "",
+      github: profile.github ?? "",
+      website: profile.website ?? "",
     },
-    vaga: {
-      empresa: job.company,
-      cargo: job.role,
-      modelo: job.work_model,
-      skills_match: job.skills,
-      estrategia: job.note,
+    job: {
+      company: typeof job.company === "string" ? job.company : "",
+      role: typeof job.role === "string" ? job.role : "",
+      skills: Array.isArray(job.skills) ? job.skills : [],
     },
-  };
+  });
 
-  try {
-    const response = await withRetry(() =>
-      gemini().models.generateContent({
-        model: MODEL,
-        config: {
-          systemInstruction: EMAIL_GENERATE_SYSTEM,
-          responseMimeType: "application/json",
-          responseJsonSchema: toGeminiSchema(EmailSchema),
-          thinkingConfig: THINKING,
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text:
-                  "Escreva o e-mail de candidatura com base nestes dados:\n\n" +
-                  JSON.stringify(context, null, 2),
-              },
-            ],
-          },
-        ],
-      }),
-    );
-
-    const text = response.text;
-    if (!text) {
-      return NextResponse.json(
-        { error: "Não consegui gerar o e-mail." },
-        { status: 422 },
-      );
-    }
-
-    const parsed = EmailSchema.safeParse(JSON.parse(text));
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "O e-mail gerado não bateu com o schema." },
-        { status: 422 },
-      );
-    }
-
-    return NextResponse.json(parsed.data);
-  } catch (err) {
-    // O status do upstream vai junto: um 400 do Gemini (config inválida) some
-    // dentro da mensagem genérica e é o tipo de falha que passou despercebida.
-    console.error("[email/generate]", (err as { status?: number })?.status, err);
-    return NextResponse.json(
-      { error: "Falha ao gerar o e-mail. Tente de novo." },
-      { status: 500 },
-    );
-  }
+  return NextResponse.json(result);
 }

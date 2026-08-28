@@ -33,38 +33,9 @@ Regras:
 - Se o texto não for um anúncio de vaga, retorne os campos vazios em vez de inventar.`;
 }
 
-export const JOB_EXTRACT_USER_TEXT =
-  "Extraia os dados desta vaga e compare as skills com o perfil.";
 export const JOB_EXTRACT_USER_IMAGE =
   "Esta imagem é um print de uma vaga. Extraia os dados e compare as skills com o perfil.";
 
-/** Prompt de geração do e-mail de candidatura. */
-export const EMAIL_GENERATE_SYSTEM = `Você escreve e-mails de candidatura para o AplicaAI, em português do Brasil.
-
-O e-mail sai da conta do próprio candidato e vai direto para um recrutador. Ele precisa soar como a pessoa escreveu, não como um template.
-
-Tom (siga este exemplo de referência):
-
----
-Olá, time da R030!
-
-Vi a vaga de Back-end Pleno e ela tem tudo a ver com o que faço hoje: APIs assíncronas em Python e FastAPI, PostgreSQL e Docker em produção.
-
-Nos últimos 4 anos construí serviços que processam pagamentos em escala, com foco em confiabilidade e observabilidade. GraphQL e mensageria (Kafka) são áreas onde já entreguei e quero me aprofundar.
-
-Anexei meu CV. Fico à disposição para uma conversa quando fizer sentido.
-
-Abraço,
-[Nome]
----
-
-Regras:
-
-- Direto e curto: 3 a 4 parágrafos. Recrutador lê em 20 segundos.
-- Cite as skills que BATEM com a vaga, usando o que está no perfil. Nunca afirme domínio de uma skill que o candidato não tem.
-- Skills parciais podem aparecer como "área onde quero me aprofundar" — como no exemplo. Nunca minta que domina.
-- Sem bajulação ("sempre admirei a empresa"), sem clichê ("sou apaixonado por tecnologia"), sem encher linguiça.
-- Mencione que o CV está anexado.
-- Assine com o nome do candidato. Se ele tiver github/site no perfil, pode incluir na assinatura.
-- O assunto nomeia o cargo e a senioridade, ex: "Candidatura — Desenvolvedor(a) Back-end Pleno".`;
+// A geração do e-mail de candidatura não usa mais o Gemini — é um template
+// determinístico. Ver src/lib/nova/email-template.ts e email-phrases.ts.
 
