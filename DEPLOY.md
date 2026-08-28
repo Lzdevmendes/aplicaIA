@@ -128,8 +128,9 @@ Criar projeto no Sentry (ou similar), pegar o **DSN** e plugar nas rotas
 ## Fase 6 — Antes de abrir ao público ⬜ pendente
 
 - [ ] Apagar o usuário de dev e o seed:
-      `delete from auth.users where id = '33333333-3333-3333-3333-333333333333';`
-      (as tabelas por usuário caem em cascade).
+      `delete from auth.users where email = 'dev@aplicaai.test';`
+      (as tabelas por usuário caem em cascade). Usa o e-mail, não um id fixo —
+      o usuário já foi recriado uma vez com id novo ao longo do projeto.
 - [ ] Supabase > Auth > Providers: habilitar **Leaked Password Protection**
       (toggle grátis — **agora relevante de verdade**, já que o login por
       e-mail+senha existe; não é mais "baixa relevância porque o login é só
