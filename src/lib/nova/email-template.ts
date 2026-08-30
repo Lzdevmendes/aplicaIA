@@ -48,7 +48,9 @@ function pick(
   // pra escolher outra coisa — best-effort, não é garantia (ver email-template.ts).
   const fresh = candidates.filter((c) => !recent.includes(c.index));
   const pool = fresh.length > 0 ? fresh : candidates;
-  return pool[Math.floor(rng() * pool.length)];
+  // Clampa pro último índice válido: rng()===1 faria Math.floor bater em
+  // pool.length (fora dos limites), descartando o parágrafo em silêncio.
+  return pool[Math.min(Math.floor(rng() * pool.length), pool.length - 1)];
 }
 
 /**
@@ -62,6 +64,12 @@ function shouldIncludePartial(matchCount: number, partialCount: number): boolean
   return true;
 }
 
+export type EmailTemplateResult = GeneratedEmail & {
+  /** Índice sorteado por categoria — devolver ao cliente permite marcar
+   * como "recente" no próximo "Gerar de novo" e evitar repetir o texto. */
+  usedIndices: Partial<Record<Category, number>>;
+};
+
 /**
  * Gera o e-mail de candidatura por template determinístico — sem IA. Troca
  * naturalidade adaptativa por zero custo e zero dependência de cota externa;
@@ -71,7 +79,7 @@ function shouldIncludePartial(matchCount: number, partialCount: number): boolean
 export function generateEmail(
   input: EmailTemplateInput,
   opts: { rng?: () => number; recentIndices?: Partial<Record<Category, number[]>> } = {},
-): GeneratedEmail {
+): EmailTemplateResult {
   const rng = opts.rng ?? Math.random;
   const recent = opts.recentIndices ?? {};
 
@@ -124,5 +132,15 @@ export function generateEmail(
     body: cleanBody,
   };
   const parsed = EmailSchema.safeParse(result);
-  return parsed.success ? parsed.data : result;
+  const validated = parsed.success ? parsed.data : result;
+
+  const usedIndices: Partial<Record<Category, number>> = {};
+  if (opening) usedIndices.opening = opening.index;
+  if (skillsMatchParagraph) usedIndices.skillsMatch = skillsMatchParagraph.index;
+  if (skillsPartialParagraph) usedIndices.skillsPartial = skillsPartialParagraph.index;
+  if (closing) usedIndices.closing = closing.index;
+  if (signature) usedIndices.signature = signature.index;
+  if (subject) usedIndices.subject = subject.index;
+
+  return { ...validated, usedIndices };
 }

@@ -1,10 +1,32 @@
 import { loadProfileContext } from "@/lib/db/profile";
 import { createClient } from "@/lib/supabase/server";
 import { enforceRateLimits, RateLimitError, AI_LIMITS } from "@/lib/ratelimit";
-import { generateEmail } from "@/lib/nova/email-template";
+import { generateEmail, type Category } from "@/lib/nova/email-template";
 import { NextResponse, type NextRequest } from "next/server";
 
 const MAX_JOB_BYTES = 60_000; // o objeto job extraído nunca chega perto disso
+const CATEGORIES: Category[] = [
+  "opening",
+  "skillsMatch",
+  "skillsPartial",
+  "closing",
+  "signature",
+  "subject",
+];
+
+/** Entrada do cliente não é confiável — aceita só números em arrays, por categoria conhecida. */
+function sanitizeRecentIndices(input: unknown): Partial<Record<Category, number[]>> {
+  if (!input || typeof input !== "object") return {};
+  const out: Partial<Record<Category, number[]>> = {};
+  for (const category of CATEGORIES) {
+    const value = (input as Record<string, unknown>)[category];
+    if (Array.isArray(value)) {
+      const nums = value.filter((n): n is number => typeof n === "number");
+      if (nums.length > 0) out[category] = nums;
+    }
+  }
+  return out;
+}
 
 /**
  * Gera o e-mail de candidatura a partir do perfil + vaga + match, por
@@ -52,20 +74,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = generateEmail({
-    candidate: {
-      fullName: profile.full_name ?? "",
-      headline: profile.headline ?? "",
-      summary: profile.summary ?? "",
-      github: profile.github ?? "",
-      website: profile.website ?? "",
+  const result = generateEmail(
+    {
+      candidate: {
+        fullName: profile.full_name ?? "",
+        headline: profile.headline ?? "",
+        summary: profile.summary ?? "",
+        github: profile.github ?? "",
+        website: profile.website ?? "",
+      },
+      job: {
+        company: typeof job.company === "string" ? job.company : "",
+        role: typeof job.role === "string" ? job.role : "",
+        skills: Array.isArray(job.skills) ? job.skills : [],
+      },
     },
-    job: {
-      company: typeof job.company === "string" ? job.company : "",
-      role: typeof job.role === "string" ? job.role : "",
-      skills: Array.isArray(job.skills) ? job.skills : [],
-    },
-  });
+    { recentIndices: sanitizeRecentIndices(body?.recentIndices) },
+  );
 
   return NextResponse.json(result);
 }

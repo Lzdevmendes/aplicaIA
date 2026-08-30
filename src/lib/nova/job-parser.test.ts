@@ -79,6 +79,16 @@ Requisitos: Python, Kafka, GraphQL, Rust`;
     expect(result.note).toMatch(/nenhuma skill técnica clara/i);
   });
 
+  it("não duplica skill quando uma é substring de outra mais específica (React Native, SQL Server)", () => {
+    const text = `Vaga: Mobile Pleno. Requisitos: React Native, SQL Server, Firebase.`;
+    const result = parseJobText(text, []);
+    const names = result.skills.map((s) => s.name);
+    expect(names).toContain("React Native");
+    expect(names).toContain("SQL Server");
+    expect(names).not.toContain("React");
+    expect(names).not.toContain("SQL");
+  });
+
   it("nota cita as skills que batem e as parciais", () => {
     const text = `Vaga: Backend. Requisitos: Python, Kafka.`;
     const result = parseJobText(text, ["Python", "RabbitMQ"]);

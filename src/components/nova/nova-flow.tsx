@@ -17,6 +17,7 @@ import {
   IconClose,
 } from "@/components/ui/icons";
 import type { JobExtraction, GeneratedEmail } from "@/lib/ai/job-schemas";
+import type { Category } from "@/lib/nova/email-template";
 
 type Phase = "input" | "generating" | "done";
 type Tab = "paste" | "print";
@@ -74,6 +75,9 @@ export function NovaFlow({
   const [email, setEmail] = useState<GeneratedEmail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Último índice de frase sorteado por categoria — reenviado em "Gerar de
+  // novo" pra o template evitar repetir o mesmo texto (email-template.ts).
+  const recentIndicesRef = useRef<Partial<Record<Category, number[]>>>({});
 
   const genLabel =
     phase === "generating" ? "Gerando…" : phase === "done" ? "Gerar de novo" : "Gerar e-mail";
@@ -116,12 +120,21 @@ export function NovaFlow({
       const emailRes = await fetch("/api/email/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job: extracted }),
+        body: JSON.stringify({ job: extracted, recentIndices: recentIndicesRef.current }),
       });
       const generated = await readJson(emailRes);
       if (!emailRes.ok) throw new Error((generated.error as string) ?? "falha ao gerar o e-mail");
 
-      const gen = generated as unknown as GeneratedEmail;
+      const gen = generated as unknown as GeneratedEmail & {
+        usedIndices?: Partial<Record<Category, number>>;
+      };
+      if (gen.usedIndices) {
+        const next: Partial<Record<Category, number[]>> = {};
+        for (const [category, index] of Object.entries(gen.usedIndices) as [Category, number][]) {
+          next[category] = [index];
+        }
+        recentIndicesRef.current = next;
+      }
       setEmail({ subject: cleanText(gen.subject), body: cleanText(gen.body) });
       setPhase("done");
     } catch (err) {

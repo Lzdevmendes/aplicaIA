@@ -40,14 +40,14 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Índice da primeira ocorrência de uma skill (ou algum alias dela) no texto, ou -1. */
-function firstIndexOfSkill(skill: string, text: string): number {
+/** Posição e tamanho da primeira ocorrência de uma skill (ou algum alias dela) no texto, ou null. */
+function firstMatchOfSkill(skill: string, text: string): { index: number; length: number } | null {
   const terms = [skill, ...(SKILL_ALIASES[skill] ?? [])];
-  let best = -1;
+  let best: { index: number; length: number } | null = null;
   for (const term of terms) {
     const re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegex(term)}(?![\\p{L}\\p{N}])`, "iu");
     const m = re.exec(text);
-    if (m && (best === -1 || m.index < best)) best = m.index;
+    if (m && (best === null || m.index < best.index)) best = { index: m.index, length: m[0].length };
   }
   return best;
 }
@@ -83,10 +83,24 @@ function extractRole(text: string): string {
 function extractSkills(text: string, candidateSkills: string[]): JobExtraction["skills"] {
   const candidateCanonical = new Set(candidateSkills.map(toCanonicalSkill));
 
-  const found = KNOWN_SKILLS.map((skill) => ({ skill, index: firstIndexOfSkill(skill, text) }))
-    .filter((s) => s.index !== -1)
-    .sort((a, b) => a.index - b.index)
-    .slice(0, MAX_SKILLS);
+  const matched = KNOWN_SKILLS.map((skill) => ({ skill, match: firstMatchOfSkill(skill, text) })).filter(
+    (s): s is { skill: string; match: { index: number; length: number } } => s.match !== null,
+  );
+
+  // Quando uma skill só aparece como parte de outra mais específica no mesmo
+  // trecho (ex.: "React" dentro de "React Native", "SQL" dentro de "SQL
+  // Server"), mantém só a mais longa — evita duas entradas redundantes ou
+  // contraditórias pra um único requisito da vaga.
+  const deduped = matched.filter(({ skill, match }) =>
+    !matched.some(({ skill: otherSkill, match: other }) => {
+      if (otherSkill === skill) return false;
+      const end = match.index + match.length;
+      const otherEnd = other.index + other.length;
+      return other.index <= match.index && otherEnd >= end && other.length > match.length;
+    }),
+  );
+
+  const found = deduped.sort((a, b) => a.match.index - b.match.index).slice(0, MAX_SKILLS);
 
   return found.map(({ skill }) => {
     if (candidateCanonical.has(skill)) return { name: skill, verdict: "match" as const };

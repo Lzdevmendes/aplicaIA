@@ -121,6 +121,19 @@ describe("generateEmail", () => {
     });
     // Não afirmamos qual índice sai, só que o e-mail continua válido.
     expect(email.body.length).toBeGreaterThan(0);
+    expect(email.usedIndices.closing).not.toBe(0);
+  });
+
+  it("devolve usedIndices, e reenviá-los como recentIndices muda o texto (regressão do 'Gerar de novo')", () => {
+    const first = generateEmail(baseInput, { rng: pickFirst });
+    expect(first.usedIndices.closing).toBeDefined();
+
+    const second = generateEmail(baseInput, {
+      rng: pickFirst,
+      recentIndices: { closing: [first.usedIndices.closing!] },
+    });
+
+    expect(second.usedIndices.closing).not.toBe(first.usedIndices.closing);
   });
 
   it("last-candidate rng também produz e-mail válido (extremos do sorteio)", () => {
