@@ -20,7 +20,15 @@ export function gemini() {
     if (!process.env.GEMINI_API_KEY) {
       throw new Error("GEMINI_API_KEY não configurada. Veja .env.example.");
     }
-    client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    // Sem timeout, o fetch da SDK pode ficar pendurado indefinidamente numa
+    // conexão que trava (visto em prod: /api/job/extract preso em "Gerando…"
+    // por minutos, sem nenhum erro nos logs — nada pra withRetry reagir,
+    // porque não houve rejeição nenhuma). 25s por tentativa garante que toda
+    // chamada falha de forma detectável dentro do maxDuration da rota.
+    client = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: { timeout: 25_000 },
+    });
   }
   return client;
 }
