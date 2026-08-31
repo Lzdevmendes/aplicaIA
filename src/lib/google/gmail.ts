@@ -39,6 +39,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
   const json = await res.json();
   if (!res.ok || !json.access_token) {
     // invalid_grant = usuário revogou o acesso ou o refresh token expirou.
+    console.error("[gmail] refresh token falhou", res.status, JSON.stringify(json));
     throw new Error(json.error_description ?? json.error ?? "falha ao renovar o token");
   }
   return json.access_token as string;
@@ -181,6 +182,7 @@ export async function sendGmail(params: {
 
   const json = await res.json();
   if (!res.ok || !json.id) {
+    console.error("[gmail] send falhou", res.status, JSON.stringify(json));
     throw new Error(json.error?.message ?? "falha ao enviar pelo Gmail");
   }
   return json.id as string;
