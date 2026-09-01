@@ -326,6 +326,16 @@ export function NovaFlow({
           </div>
         )}
 
+        {cv && (
+          <div className="px-[22px] pb-4">
+            <span className="inline-flex items-center gap-[9px] bg-bg border border-border rounded-[7px] px-[11px] py-2">
+              <IconDoc size={16} color="#C77A16" />
+              <span className="text-[12.5px] font-medium">{cv.filename}</span>
+              <span className="font-mono text-[10.5px] text-faint">anexado ao gerar</span>
+            </span>
+          </div>
+        )}
+
         <div className="px-[22px] py-4 border-t border-border flex items-center gap-3 bg-bg">
           <button
             onClick={generate}
@@ -387,6 +397,7 @@ export function NovaFlow({
           <EmailCard
             email={email}
             contactEmail={job?.contact_email ?? ""}
+            onEditContact={(next) => setJob((j) => (j ? { ...j, contact_email: next } : j))}
             cv={cv}
             saved={saved}
             onEdit={(next) => setEmail(next)}
@@ -555,6 +566,7 @@ function PrintDrop({
 function EmailCard({
   email,
   contactEmail,
+  onEditContact,
   cv,
   saved,
   onEdit,
@@ -564,6 +576,7 @@ function EmailCard({
 }: {
   email: GeneratedEmail;
   contactEmail: string;
+  onEditContact: (email: string) => void;
   cv: { filename: string; size_bytes: number } | null;
   saved: boolean;
   onEdit: (e: GeneratedEmail) => void;
@@ -577,9 +590,12 @@ function EmailCard({
         <span className="font-mono text-[11px] tracking-[0.1em] uppercase text-muted">
           Para
         </span>
-        <span className="text-[13px] text-ink">
-          {contactEmail || "sem e-mail na vaga"}
-        </span>
+        <input
+          value={contactEmail}
+          onChange={(e) => onEditContact(e.target.value)}
+          placeholder="e-mail de contato da vaga"
+          className="flex-1 min-w-0 border-none outline-none text-[13px] text-ink bg-transparent placeholder:text-faint"
+        />
         <span className="ml-auto font-mono text-[10.5px] text-pine bg-pine-tint px-2 py-[3px] rounded-[5px]">
           {saved ? "salvo" : "pronto"}
         </span>

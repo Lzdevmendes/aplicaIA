@@ -98,6 +98,29 @@ export const SKILLS_PARTIAL: Phrase[] = [
     `Se ${c.skillsPartialText} for requisito duro, aí eu chego como quem está aprendendo — com base para aprender rápido, mas aprendendo.`,
 ];
 
+/**
+ * Usado no lugar de SKILLS_MATCH quando a vaga não bateu nenhuma skill do
+ * dicionário (buildNote, em job-parser.ts, já avisa "destaque sua
+ * experiência" nesse caso — este é o parágrafo que cumpre isso). Sem essas
+ * variantes, o e-mail saía só com abertura genérica + CV anexado, sem citar
+ * nada do perfil do candidato mesmo quando headline/summary existem.
+ */
+export const NO_MATCH_FALLBACK: Phrase[] = [
+  (c) => (c.summary ? c.summary : null),
+  (c) =>
+    c.headline
+      ? `Hoje atuo como ${c.headline}. Não bati item a item com a lista de tecnologias da vaga, mas é a experiência que trago para essa posição.`
+      : null,
+  (c) =>
+    c.summary && c.headline
+      ? `${c.summary}\n\nAtuo hoje como ${c.headline}.`
+      : null,
+  (c) =>
+    c.headline
+      ? `Não encontrei uma correspondência direta de tecnologias com o anúncio, mas minha experiência como ${c.headline} é adjacente ao que vocês pedem — e a curva de adaptação costuma ser curta.`
+      : null,
+];
+
 export const CLOSING: Phrase[] = [
   () => `Anexei meu CV. Fico à disposição para uma conversa quando fizer sentido.`,
   () => `O CV vai anexado, com o detalhe de cada projeto. Se quiserem conversar, é só chamar.`,

@@ -6,6 +6,7 @@ import {
   OPENING_NO_COMPANY,
   SKILLS_MATCH,
   SKILLS_PARTIAL,
+  NO_MATCH_FALLBACK,
   CLOSING,
   SIGNATURE,
   SUBJECT,
@@ -103,7 +104,13 @@ export function generateEmail(
   const opening = ctx.empresa
     ? pick(OPENING_WITH_COMPANY, ctx, rng, recent.opening)
     : pick(OPENING_NO_COMPANY, ctx, rng, recent.opening);
-  const skillsMatchParagraph = matches.length > 0 ? pick(SKILLS_MATCH, ctx, rng, recent.skillsMatch) : null;
+  // Sem match nenhum, cai no fallback (headline/summary) em vez de deixar o
+  // e-mail sem nenhuma menção ao candidato — reusa a mesma chave de recência
+  // ("skillsMatch"), já que os dois nunca coexistem na mesma geração.
+  const skillsMatchParagraph =
+    matches.length > 0
+      ? pick(SKILLS_MATCH, ctx, rng, recent.skillsMatch)
+      : pick(NO_MATCH_FALLBACK, ctx, rng, recent.skillsMatch);
   const skillsPartialParagraph = shouldIncludePartial(matches.length, partials.length)
     ? pick(SKILLS_PARTIAL, ctx, rng, recent.skillsPartial)
     : null;
